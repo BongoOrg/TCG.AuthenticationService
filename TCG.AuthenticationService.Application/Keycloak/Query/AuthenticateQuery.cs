@@ -1,7 +1,9 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using TCG.AuthenticationService.Application.Contracts;
 using TCG.CatalogService.Application.Keycloak.DTO.Request;
+using TCG.Common.Middlewares.MiddlewareException;
 
 namespace TCG.AuthenticationService.Application.Keycloak.Query;
 
@@ -24,10 +26,14 @@ public class AuthenticateQueryHandler : IRequestHandler<AuthenticateQuery, strin
             var accessToken = await _keycloakService.AuthenticateUserAsync(request.UserLogin);
             return accessToken;
         }
-        catch (Exception ex)
+        catch (UnAuthorizedException e)
         {
-            _logger.LogError(ex,"Error while authenticate user");
             throw;
+        }
+        catch (Exception e)
+        {
+            var errorMessage = $"Error in {nameof(AuthenticateQueryHandler)}: {e.Message}";
+            throw new Exception(errorMessage,e);
         }
     }
 }

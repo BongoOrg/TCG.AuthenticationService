@@ -9,7 +9,7 @@ using TCG.AuthenticationService.Application.Consumer.Messages;
 using TCG.Common.MassTransit.Messages;
 using TCG.Common.Settings;
 
-namespace TCG.CatalogService.Application;
+namespace TCG.AuthenticationService.Application;
 
 public static class ApplicationDependencyInjection
 {

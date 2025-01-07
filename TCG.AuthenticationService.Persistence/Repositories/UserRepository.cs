@@ -23,4 +23,9 @@ public class UserRepository : Repository<User>, IUserRepository
     {
         return await _dbContext.Users.Where(x => x.Id == idUser).SingleOrDefaultAsync();
     }
+
+    public async Task<bool> CheckUserExist(string mail, Guid sub, string firstname, string lastname, string username)
+    {
+        return await _dbContext.Users.Where(user => user.Email == mail || user.Sub == sub || user.Firstname == firstname || user.Lastname == lastname || user.Username == username).FirstOrDefaultAsync() != null;
+    }
 }

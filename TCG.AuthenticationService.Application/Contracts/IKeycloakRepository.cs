@@ -10,4 +10,5 @@ public interface IKeycloakRepository
     Task<Guid> GetUserInfoAsync(string accessToken);
     Task<string> GetUserIdAsync(string accessToken, string username);
     Task CreateUserAsync(string accessToken, UserRegistration userRegistration);
+    Task DeleteUserAsync(string accessToken, string userId);
 }

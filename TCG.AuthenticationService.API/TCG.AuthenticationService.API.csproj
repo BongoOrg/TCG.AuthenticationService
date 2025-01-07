@@ -15,7 +15,7 @@
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="7.0.3" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
-        <PackageReference Include="TCG.Common" Version="1.3.52" />
+        <PackageReference Include="TCG.Common" Version="1.4.8" />
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\TCG.AuthenticationService.Application\TCG.AuthenticationService.Application.csproj" />

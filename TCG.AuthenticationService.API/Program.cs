@@ -1,4 +1,5 @@
 using System.Configuration;
+using TCG.AuthenticationService.Application;
 using TCG.AuthenticationService.Application.Contracts;
 using TCG.AuthenticationService.Persistence;
 using TCG.AuthenticationService.Persistence.DependencyInjection;

@@ -30,21 +30,39 @@ public class KeycloakRepository : IKeycloakRepository
     
     public async Task<string> GetAdminAccessTokenAsync()
     {
-        var httpClient = GetConfigHttpClient();
-        var requestBody = new FormUrlEncodedContent(new[]
+        try
         {
-            new KeyValuePair<string, string>("grant_type", "client_credentials"),
-            new KeyValuePair<string, string>("client_id", _keycloakSetting.ClientId),
-            new KeyValuePair<string, string>("client_secret", _keycloakSetting.ClientSecret)
-        });
+            var httpClient = GetConfigHttpClient();
+            var requestBody = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("grant_type", "client_credentials"),
+                new KeyValuePair<string, string>("client_id", _keycloakSetting.ClientId),
+                new KeyValuePair<string, string>("client_secret", _keycloakSetting.ClientSecret)
+            });
 
-        var response = await httpClient.PostAsync(_keycloakSetting.TokenEndpoint, requestBody);
-        response.EnsureSuccessStatusCode();
+            var response = await httpClient.PostAsync(_keycloakSetting.TokenEndpoint, requestBody);
+            response.EnsureSuccessStatusCode();
 
-        var content = await response.Content.ReadAsStringAsync();
-        dynamic tokenResponse = JsonConvert.DeserializeObject(content);
+            var content = await response.Content.ReadAsStringAsync();
+            dynamic tokenResponse = JsonConvert.DeserializeObject(content);
 
-        return tokenResponse.access_token;
+            return tokenResponse.access_token;
+        }
+        catch (HttpRequestException e)
+        {
+            var errorMessage = $"HTTP error occurred in {nameof(GetAdminAccessTokenAsync)}: {e.Message}";
+            throw new Exception(errorMessage, e);
+        }
+        catch (JsonException e)
+        {
+            var errorMessage = $"Error deserializing response in {nameof(GetAdminAccessTokenAsync)}: {e.Message}";
+            throw new Exception(errorMessage, e);
+        }
+        catch (Exception e)
+        {
+            var errorMessage = $"Unexpected error occurred in {nameof(GetAdminAccessTokenAsync)}: {e.Message}";
+            throw new Exception(errorMessage, e);
+        }
     }
     
     public async Task<string> AuthenticateUserAsync(UserLogin userLogin)
@@ -61,7 +79,10 @@ public class KeycloakRepository : IKeycloakRepository
         });
 
         var response = await httpClient.PostAsync(_keycloakSetting.TokenEndpoint, requestBody);
-        response.EnsureSuccessStatusCode();
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            throw new UnAuthorizedException("Invalid credentials provided.");
+        }
 
         var content = await response.Content.ReadAsStringAsync();
         dynamic tokenResponse = JsonConvert.DeserializeObject(content);
@@ -71,102 +92,95 @@ public class KeycloakRepository : IKeycloakRepository
 
     public async Task<Guid> GetUserInfoAsync(string accessToken)
     {
-        var httpClient = GetConfigHttpClient();
-        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        var response = await httpClient.GetAsync(_keycloakSetting.UserInfoEndpoint);
-        if (response.ReasonPhrase == "Unauthorized")
+        try
         {
-            throw new UnAuthorizedException();
+            var httpClient = GetConfigHttpClient();
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+            var response = await httpClient.GetAsync(_keycloakSetting.UserInfoEndpoint);
+
+            var content = await response.Content.ReadAsStringAsync();
+            var userInfo = JsonConvert.DeserializeObject<KeycloakUser>(content);
+            var item = Guid.Parse(userInfo.Sub);
+            return item;
         }
-        response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        var userInfo = JsonConvert.DeserializeObject<KeycloakUser>(content);
-        var item = Guid.Parse(userInfo.Sub);
-        return item;
+        catch (Exception e)
+        {
+            var errorMessage = $"Error in {nameof(GetUserInfoAsync)}: {e.Message}";
+            throw new Exception(errorMessage,e);
+        }
     }
 
     public async Task CreateUserAsync(string accessToken, UserRegistration userRegistration)
     {
         var httpClient = GetConfigHttpClient();
-        try
-        {
-            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-            var user = new
+        var user = new
+        {
+            username = userRegistration.Username,
+            email = userRegistration.Email,
+            firstName = userRegistration.Firstname,
+            lastName = userRegistration.Lastname,
+            attributes = new Dictionary<string, string>
             {
-                username = userRegistration.Username,
-                email = userRegistration.Email,
-                firstName = userRegistration.Firstname,
-                lastName = userRegistration.Lastname,
-                attributes = new Dictionary<string, string>
+                { "address", userRegistration.Adress },
+                { "dateOfBirth", userRegistration.BirthDate.ToString("yyyy-MM-dd")},
+                { "city", userRegistration.City },
+                { "postalCode", userRegistration.PostalCode },
+            },
+            enabled = true,
+            emailVerified = false,
+            credentials = new[]
+            {
+                new
                 {
-                    { "address", userRegistration.Adress },
-                    { "dateOfBirth", userRegistration.BirthDate.ToString("yyyy-MM-dd")},
-                    { "city", userRegistration.City },
-                    { "postalCode", userRegistration.PostalCode },
-                },
-                enabled = true,
-                emailVerified = false,
-                credentials = new[]
-                {
-                    new
-                    {
-                        type = "password",
-                        value = userRegistration.Password,
-                        temporary = false
-                    }
+                    type = "password",
+                    value = userRegistration.Password,
+                    temporary = false
                 }
-            };
+            }
+        };
 
-            var requestBody = new StringContent(JsonConvert.SerializeObject(user), Encoding.UTF8, "application/json");
-            var response = await httpClient.PostAsync(_keycloakSetting.AdminUsersEndpoint, requestBody);
-            if (response.StatusCode == HttpStatusCode.BadRequest)
-            {
-                var jsonResponse = await response.Content.ReadAsStringAsync();
-                Console.WriteLine("Erreur 400 (Bad Request) : " + jsonResponse);
-            }
-            if (response.StatusCode == HttpStatusCode.Conflict)
-            {
-                throw new UserAlreadyExistsException("User already exists");
-            }
-            response.EnsureSuccessStatusCode();
-        }
-        catch (Exception e)
+        var requestBody = new StringContent(JsonConvert.SerializeObject(user), Encoding.UTF8, "application/json");
+        var response = await httpClient.PostAsync(_keycloakSetting.AdminUsersEndpoint, requestBody);
+        if (response.StatusCode == HttpStatusCode.Conflict)
         {
-            Console.WriteLine(e);
-            throw;
+            throw new UserAlreadyExistsException($"Error in {nameof(CreateUserAsync)}: User already exist in keycloak");
         }
+        response.EnsureSuccessStatusCode();
     }
     
     public async Task<string> GetUserIdAsync(string accessToken, string username)
     {
-        try
+        var httpClient = GetConfigHttpClient();
+
+        var searchUserEndpoint = $"{_keycloakSetting.AdminUsersEndpoint}?username={username}";
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await httpClient.GetAsync(searchUserEndpoint);
+        response.EnsureSuccessStatusCode();
+
+        var content = await response.Content.ReadAsStringAsync();
+        var users = JsonConvert.DeserializeObject<List<KeycloakUser>>(content);
+
+        if (users.Count == 0)
         {
-            var httpClient = GetConfigHttpClient();
-
-            var searchUserEndpoint = $"{_keycloakSetting.AdminUsersEndpoint}?username={username}";
-            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-            var response = await httpClient.GetAsync(searchUserEndpoint);
-            response.EnsureSuccessStatusCode();
-
-            var content = await response.Content.ReadAsStringAsync();
-            var users = JsonConvert.DeserializeObject<List<KeycloakUser>>(content);
-
-            if (users.Count == 0)
-            {
-                throw new Exception("Aucun utilisateur trouvé avec ce nom d'utilisateur.");
-            }
-            return users[0].Id;
+            throw new Exception("Aucun utilisateur trouvé avec ce nom d'utilisateur.");
         }
-        catch (Exception e)
-        {
-            Console.WriteLine(e);
-            throw;
-        }
+        return users[0].Id;
     }
 
+    public async Task DeleteUserAsync(string accessToken, string userId)
+    {
+        var httpClient = GetConfigHttpClient();
+        var deleteUserEndpoint = $"{_keycloakSetting.AdminUsersEndpoint}/{userId}";
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        
+        var response = await httpClient.DeleteAsync(deleteUserEndpoint);
+        response.EnsureSuccessStatusCode();
+    }
 
     private HttpClient GetConfigHttpClient()
     {

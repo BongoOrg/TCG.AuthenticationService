@@ -25,31 +25,15 @@ public class RegistrationController : ControllerBase
     [HttpPost("authenticate")]
     public async Task<IActionResult> Authenticate([FromBody] UserLogin userLogin)
     {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState);
-        }
-
-        try
-        {
-            var accessToken = await _mediator.Send(new AuthenticateQuery(userLogin));
-            return Ok(new AuthenticationResponse { AccessToken = accessToken });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(401, "Invalid credentials.");
-        }
+        var accessToken = await _mediator.Send(new AuthenticateQuery(userLogin));
+        return Ok(new AuthenticationResponse { AccessToken = accessToken });
     }
     
     [HttpGet("user-info")]
     public async Task<IActionResult> UserInfo()
     {
         string authorizationHeader = HttpContext.Request.Headers["Authorization"];
-
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState);
-        }
+        
         string token = authorizationHeader.Substring("Bearer ".Length);
         try
         {
@@ -66,6 +50,13 @@ public class RegistrationController : ControllerBase
             _logger.LogError(ex, "Unexpected error while processing your request.");
             return StatusCode(500, "An unexpected error occurred while processing your request.");
         }
+    }
+    
+    [HttpGet("user-exist")]
+    public async Task<IActionResult> CheckUserExist(string mailUser, Guid sub, string firstname, string lastname, string username)
+    {
+        var userExist = await _mediator.Send(new CheckUserExistQuery(mailUser, sub, firstname, lastname, username));
+        return Ok(userExist);
     }
 
     [HttpGet("profile/{idUser}")]
@@ -85,15 +76,13 @@ public class RegistrationController : ControllerBase
             {
                 CurrentUserInfos.Id = 0;
             }
-               
-           
         }
         else
         {
             CurrentUserInfos.Id = 0;
         }
             
-            var userProfileInfos = await _mediator.Send(new GetUserProfileQuery(idUser));
+        var userProfileInfos = await _mediator.Send(new GetUserProfileQuery(idUser));
 
         if(CurrentUserInfos.Id == idUser)
         {
@@ -110,24 +99,8 @@ public class RegistrationController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Register([FromBody] UserRegistration userRegistration)
     {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState);
-        }
-
-        try
-        {
-            await _mediator.Send(new CreateUserCommand(userRegistration));
-            return Ok();
-        }
-        catch (UserAlreadyExistsException ex)
-        {
-            return new StatusCodeResult(409);
-        }
-        catch (Exception ex)
-        {
-            return new StatusCodeResult(500);
-        }
+        await _mediator.Send(new CreateUserCommand(userRegistration));
+        return Ok();
     }
 
 }

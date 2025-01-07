@@ -26,7 +26,6 @@ public class GetUserProfileQueryHandler : IRequestHandler<GetUserProfileQuery, U
         _mapper = mapper;
     }
 
-
     public async Task<UserProfileDtoResponse> Handle(GetUserProfileQuery request, CancellationToken cancellationToken)
     {
         try
